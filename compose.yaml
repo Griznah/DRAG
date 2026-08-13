@@ -39,6 +39,7 @@ services:
       dockerfile: Containerfile
     image: drag-app:latest
     container_name: drag-app
+    user: "0:0"  # dev only: image is non-root (USER 1001); override so host bind-mounts stay writable. Prod K8s runs non-root.
     ports:
       - "8000:8000"
     volumes:

@@ -1,0 +1,110 @@
+name: Build and Push Images
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch: # manual run, image-test only (no push)
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docker-publish-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  secretscan:
+    name: truffleHog secrets scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # actions/checkout@v6.0.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: trufflesecurity/trufflehog@c3e599b7163e8198a55467f3133db0e7b2a492cb # trufflesecurity/trufflehog@v3.93.7
+        with:
+          extra_args: --results=verified,unknown
+
+  image-test:
+    name: Image tests (build + non-root check)
+    runs-on: ubuntu-latest
+    needs: secretscan
+    strategy:
+      matrix:
+        include:
+          - image: drag-app
+            dockerfile: Containerfile
+          - image: drag-llama-embed
+            dockerfile: Dockerfile.embed
+    steps:
+      - uses: actions/checkout@1e31de5234b9f8995739874a8ce0492dc87873e2 # actions/checkout@v4.0.0
+        with:
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # docker/setup-buildx-action@v4.0.0
+      - name: Build image
+        uses: docker/build-push-action@d08e5c354a6adb9ed34480a06d141179aa583294 # docker/build-push-action@v7.0.0
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          push: false
+          load: true
+          tags: ${{ matrix.image }}:test
+          cache-from: type=gha,scope=${{ matrix.image }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}
+      # drag-app must run non-root (USER 1001 in Containerfile); the embed server reads
+      # a root-owned /models in K8s via fsGroup, so only assert it boots here.
+      - name: Non-root check (drag-app)
+        if: matrix.image == 'drag-app'
+        run: |
+          uid=$(docker run --rm --entrypoint id drag-app:test -u)
+          if [ "$uid" != "1001" ]; then
+            echo "FATAL: drag-app runs as uid $uid, expected 1001 (non-root)" >&2
+            exit 1
+          fi
+          echo "PASS: drag-app runs as non-root uid $uid"
+      - name: Smoke import (drag-app)
+        if: matrix.image == 'drag-app'
+        run: docker run --rm --entrypoint python drag-app:test -c "import fastapi, qdrant_client, transformers, docling; print('imports ok')"
+
+  build-and-push:
+    name: Build & push ${{ matrix.image }}
+    runs-on: ubuntu-latest
+    needs: image-test
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      packages: write
+    strategy:
+      matrix:
+        include:
+          - image: drag-app
+            dockerfile: Containerfile
+          - image: drag-llama-embed
+            dockerfile: Dockerfile.embed
+    steps:
+      - uses: actions/checkout@1e31de5234b9f8995739874a8ce0492dc87873e2 # actions/checkout@v4.0.0
+        with:
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # docker/setup-buildx-action@v4.0.0
+      - uses: docker/login-action@b45d80f862d83dbcd57f89517bcf500b2ab88fb2 # docker/login-action@v4.0.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+      - id: meta
+        uses: docker/metadata-action@030e881283bb7a6894de51c315a6bfe6a94e05cf # docker/metadata-action@v6.0.0
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest
+      - uses: docker/build-push-action@d08e5c354a6adb9ed34480a06d141179aa583294 # docker/build-push-action@v7.0.0
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=${{ matrix.image }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}

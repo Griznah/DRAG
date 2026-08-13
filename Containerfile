@@ -15,5 +15,11 @@ ENV TORCHDYNAMO_DISABLE=1
 COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-dev
 COPY app/ /app/app/
+# Non-root: chown the writable cwd (parse/embed caches land under /app) and /data
+# (HF_HOME + PDF dir; PVCs mount over these in K8s) and drop privileges.
+RUN useradd -u 1001 -r -M drag \
+    && mkdir -p /data/hf-cache /data/pdf \
+    && chown -R 1001:1001 /app /data
+USER 1001
 EXPOSE 8000
 CMD ["uvicorn", "app.api:app", "--host", "0.0.0.0", "--port", "8000"]
