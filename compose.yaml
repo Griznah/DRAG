@@ -27,8 +27,7 @@ services:
     container_name: drag-llama-embed
     ports:
       - "8081:8080"
-    volumes:
-      - ./models:/models:ro
+    # gguf is baked into the image now — no ./models mount needed.
     restart: unless-stopped
     depends_on:
       - qdrant

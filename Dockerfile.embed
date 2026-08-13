@@ -1,10 +1,12 @@
-# Embedding server: llama-cpp-python[server] serving OpenAI /v1/embeddings.
-# ponytail: the plan's ghcr.io/abetlen/llama-cpp-python/server is gated (403) and
-# ggerganov/llama.cpp:full-* images are 2023-era (no server binary). This is the
-# fallback the plan already lists, built from the prebuilt CPU wheel index.
+# Embedding server: llama-cpp-python[server] serving OpenAI /v1/embeddings, with the
+# Qwen3 gguf BAKED IN (~0.9GB image). Self-contained — no initContainer / models PVC
+# needed in K8s. (The plan's ghcr.io/abetlen image is gated; ggerganov/llama.cpp:full-*
+# are 2023-era — so build from the prebuilt CPU wheel index, the plan's own fallback.)
 FROM python:3.12-slim
-RUN pip install --no-cache-dir "llama-cpp-python[server]" \
+RUN pip install --no-cache-dir "llama-cpp-python[server]" huggingface_hub \
       --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu
+# ponytail: bake the model so the container is self-contained (drops a PVC + initContainer).
+RUN python -c "from huggingface_hub import hf_hub_download; hf_hub_download('Qwen/Qwen3-Embedding-0.6B-GGUF','Qwen3-Embedding-0.6B-Q8_0.gguf', local_dir='/models')"
 ENV MODEL=/models/Qwen3-Embedding-0.6B-Q8_0.gguf \
     HOST=0.0.0.0 PORT=8080 \
     EMBEDDING=True N_GPU_LAYERS=0
