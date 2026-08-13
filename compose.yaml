@@ -1,0 +1,84 @@
+# DRAG — local dev stack. The 27B generation box is external (LLAMA_GEN_URL).
+# Run: podman compose up -d
+# First-time: download Qwen3-Embedding-0.6B-Q8_0.gguf into ./models/
+#
+# Local Phase 2 verification does NOT need drag-app built — run the app from your
+# .venv against these two backing containers instead.
+
+services:
+  qdrant:
+    image: docker.io/qdrant/qdrant:v1.19.0
+    # ponytail: pin by digest once pulled (`podman images --digests`), see DRAG.md.
+    container_name: drag-qdrant
+    ports:
+      - "6333:6333"
+      - "6334:6334" # gRPC
+    volumes:
+      - drag-storage:/qdrant/storage
+    restart: unless-stopped
+
+  llama-embed:
+    # llama-cpp-python[server] serving OpenAI /v1/embeddings {content|input}.
+    # See Dockerfile.embed for why we build instead of using the (gated/dead) upstream images.
+    build:
+      context: .
+      dockerfile: Dockerfile.embed
+    image: drag-llama-embed:latest
+    container_name: drag-llama-embed
+    ports:
+      - "8081:8080"
+    volumes:
+      - ./models:/models:ro
+    restart: unless-stopped
+    depends_on:
+      - qdrant
+
+  drag-app:
+    build:
+      context: .
+      dockerfile: Containerfile
+    image: drag-app:latest
+    container_name: drag-app
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./pdf:/app/pdf
+      - ./.parse_cache:/app/.parse_cache   # dev: reuse docling parse cache across venv/container
+      - ./.embed_cache:/app/.embed_cache     # dev: reuse embedding cache (saves ~11min/ingest)
+      - ./.cache/huggingface:/root/.cache/huggingface:Z
+    environment:
+      QDRANT_URL: http://drag-qdrant:6333
+      LLAMA_EMBED_URL: http://drag-llama-embed:8080
+      # ponytail: point this at the dedicated 27B box, not localhost.
+      LLAMA_GEN_URL: http://9800x3d.lan.griznah.net:9931
+      TORCHDYNAMO_DISABLE: "1"
+      PDF_DIR: /app/pdf
+    restart: unless-stopped
+    depends_on:
+      - qdrant
+      - llama-embed
+
+  # Frontend. Pure chat UI — talks to drag-app over OpenAI API. In a full
+  # `podman compose up` it resolves drag-app by name; for local verification it
+  # runs alone and reaches the host's venv app via host.containers.internal.
+  open-webui:
+    image: ghcr.io/open-webui/open-webui:main
+    container_name: drag-webui
+    ports:
+      - "3000:8080"
+    volumes:
+      - owui-data:/app/backend/data
+    environment:
+      OPENAI_API_BASE_URL: http://drag-app:8000/v1
+      OPENAI_API_KEY: dummy          # adapter needs no key; OWUI always sends one
+      ENABLE_RAG_WEB_SEARCH: "false" # no web search
+      # OWUI's own document RAG stays unused — books come in via /ingest (docling)
+    extra_hosts:
+      - "host.containers.internal:host-gateway"
+    restart: unless-stopped
+    depends_on:
+      - drag-app
+
+volumes:
+  drag-storage:
+  owui-data:

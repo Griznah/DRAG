@@ -1,0 +1,20 @@
+# ponytail: build context must exclude .venv (3.7G w/ torch) or podman uploads it all.
+.venv/
+.parse_cache/
+.embed_cache/
+models/
+pdf/*
+!pdf/.gitkeep
+tests/
+.git/
+.gitignore
+__pycache__/
+**/__pycache__/
+*.pyc
+*.gguf
+*.pdf
+.env
+compose.yaml
+Dockerfile.embed
+DRAG.md
+/tmp/

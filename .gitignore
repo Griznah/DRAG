@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+.venv/
+.hf-cache/
+.cache/
+models/
+*.gguf
+pdf/*
+!pdf/.gitkeep
+.parse_cache/
+.embed_cache/
+.env

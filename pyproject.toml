@@ -1,0 +1,23 @@
+[project]
+name = "drag"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "docling",          # PDF parsing + HybridChunker
+    "fastapi",
+    "uvicorn[standard]",
+    "sse-starlette",    # EventSourceResponse for /query SSE
+    "qdrant-client",
+    "flagembedding",    # bge-reranker-v2-m3 (needs transformers<5 — prepare_for_model removed in v5)
+    "transformers<5",
+    "httpx",            # async calls to llama-server (embed + LLM)
+    "python-multipart", # FastAPI UploadFile support for /ingest
+    "pydantic",
+]
+
+[project.optional-dependencies]
+# ponytail: fallback only — load embed model in-app if llama-server endpoint fails (see "What to verify early")
+fallback = ["llama-cpp-python"]
+
+[tool.uv]
+package = false

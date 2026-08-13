@@ -1,0 +1,12 @@
+# Embedding server: llama-cpp-python[server] serving OpenAI /v1/embeddings.
+# ponytail: the plan's ghcr.io/abetlen/llama-cpp-python/server is gated (403) and
+# ggerganov/llama.cpp:full-* images are 2023-era (no server binary). This is the
+# fallback the plan already lists, built from the prebuilt CPU wheel index.
+FROM python:3.12-slim
+RUN pip install --no-cache-dir "llama-cpp-python[server]" \
+      --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu
+ENV MODEL=/models/Qwen3-Embedding-0.6B-Q8_0.gguf \
+    HOST=0.0.0.0 PORT=8080 \
+    EMBEDDING=True N_GPU_LAYERS=0
+EXPOSE 8080
+CMD ["python", "-m", "llama_cpp.server"]

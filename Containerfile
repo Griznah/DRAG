@@ -1,0 +1,19 @@
+# ponytail: single stage — all deps are runtime, multi-stage buys nothing here
+FROM python:3.12-slim
+# opencv (docling tableformer) runtime libs absent from -slim; install at base so
+# uv sync layer above still caches on pyproject/lock, not on apt.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      libgl1 libglib2.0-0 libxcb1 libsm6 libxext6 libxrender1 \
+    && rm -rf /var/lib/apt/lists/*
+WORKDIR /app
+# ponytail: pin uv by digest — :latest = non-reproducible build. Bump deliberately.
+COPY --from=ghcr.io/astral-sh/uv:0.12.3@sha256:2d890623d310b57771ce840f0da5eed5fc6d657da05ffaa45d82797b53fa3abc /uv /usr/local/bin/uv
+ENV UV_LINK_MODE=copy UV_COMPILE_BYTECODE=1 UV_PROJECT_ENVIRONMENT=/usr/local
+# ponytail: python:3.12-slim has no g++; torch dynamo/inductor JIT-compile needs one.
+# Disable dynamo (run eager) — avoids apt/build-essential in the image, docling parses fine.
+ENV TORCHDYNAMO_DISABLE=1
+COPY pyproject.toml uv.lock ./
+RUN uv sync --frozen --no-dev
+COPY app/ /app/app/
+EXPOSE 8000
+CMD ["uvicorn", "app.api:app", "--host", "0.0.0.0", "--port", "8000"]
