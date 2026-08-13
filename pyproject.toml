@@ -20,6 +20,9 @@ fallback = ["llama-cpp-python"]
 
 [tool.uv]
 package = false
+# Only ever run on Linux (image is python:3.12-slim; dev + k8s are Linux). Restricting
+# the lock here drops darwin/win32/emscripten markers + their per-platform wheel hashes.
+environments = ["sys_platform == 'linux'"]
 
 # CPU-only torch. The default PyPI torch wheel drags ~2.4GB of nvidia CUDA libs +
 # triton onto a stack with no GPU; pin to the PyTorch CPU index instead.
