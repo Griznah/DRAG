@@ -4,11 +4,12 @@ from pathlib import Path
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from qdrant_client import AsyncQdrantClient, models
+from qdrant_client.http.exceptions import UnexpectedResponse
 from sse_starlette.sse import EventSourceResponse
 
 from . import config
 from .ingest import ingest_pdf
-from .query import answer
+from .query import answer, missing_collection
 from .openai_api import router as openai_router
 
 app = FastAPI(title="DRAG")
@@ -63,6 +64,8 @@ async def books_endpoint():
         return [
             {"book": b, "page": p.get("page"), "section": p.get("section")} for b, p in seen.items()
         ]
+    except UnexpectedResponse as e:
+        return missing_collection(e, [])
     finally:
         await client.close()
 
@@ -80,5 +83,7 @@ async def delete_book(book: str):
             ),
         )
         return {"deleted": book}
+    except UnexpectedResponse as e:
+        return missing_collection(e, {"deleted": book})
     finally:
         await client.close()

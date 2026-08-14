@@ -50,7 +50,9 @@ services:
       QDRANT_URL: http://drag-qdrant:6333
       LLAMA_EMBED_URL: http://drag-llama-embed:8080
       # ponytail: point this at the dedicated 27B box, not localhost.
-      LLAMA_GEN_URL: http://9800x3d.lan.griznah.net:9931
+      # Export LLAMA_GEN_URL (or set in .env) to point at your 27B box; falls back to a
+      # deliberately-dead placeholder so a missing override fails loudly, not silently.
+      LLAMA_GEN_URL: ${LLAMA_GEN_URL:-http://your.url.here:9931}
       TORCHDYNAMO_DISABLE: "1"
       PDF_DIR: /app/pdf
     restart: unless-stopped

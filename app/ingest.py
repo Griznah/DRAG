@@ -34,10 +34,26 @@ def parse_pdf(pdf_path: Path) -> list:
         with open(cache, "rb") as f:
             return pickle.load(f)
 
-    from docling.document_converter import DocumentConverter
+    from docling.document_converter import DocumentConverter, PdfFormatOption
+    from docling.datamodel.base_models import InputFormat
+    from docling.datamodel.pipeline_options import PdfPipelineOptions, RapidOcrOptions
     from docling.chunking import HybridChunker
 
-    doc = DocumentConverter().convert(str(pdf_path)).document
+    # Pin OCR backend to torch: matches the .pth weights baked into the image
+    # (Containerfile). docling's default is OcrAutoOptions, which only lands on torch
+    # via an onnxruntime/easyocr ImportError cascade — pinning makes build<->runtime
+    # alignment explicit, not coincidental. Cache below is keyed on path+mtime, so a
+    # backend change also needs .parse_cache cleared.
+    converter = DocumentConverter(
+        format_options={
+            InputFormat.PDF: PdfFormatOption(
+                pipeline_options=PdfPipelineOptions(
+                    ocr_options=RapidOcrOptions(backend="torch")
+                )
+            )
+        }
+    )
+    doc = converter.convert(str(pdf_path)).document
     chunker = HybridChunker(
         tokenizer=config.EMBED_TOKENIZER,
         chunk_size=config.CHUNK_TOKENS,

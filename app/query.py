@@ -3,6 +3,7 @@ import json
 
 import httpx
 from qdrant_client import AsyncQdrantClient, models
+from qdrant_client.http.exceptions import UnexpectedResponse
 
 from . import config, ingest
 from .reranker import rerank
@@ -10,6 +11,15 @@ from .reranker import rerank
 
 async def _client() -> AsyncQdrantClient:
     return AsyncQdrantClient(url=config.QDRANT_URL)
+
+
+def missing_collection(e: UnexpectedResponse, fallback):
+    """Qdrant 404 = the collection doesn't exist yet (fresh stack, nothing ingested):
+    return fallback. Any other status re-raises. Single home for this semantic —
+    used by search() and the /books endpoints."""
+    if e.status_code == 404:
+        return fallback
+    raise e
 
 
 async def search(question: str, book: str | None = None, limit: int = config.SEARCH_LIMIT):
@@ -38,6 +48,8 @@ async def search(question: str, book: str | None = None, limit: int = config.SEA
             with_payload=True,
         )
         return res.points
+    except UnexpectedResponse as e:
+        return missing_collection(e, [])
     finally:
         await client.close()
 
