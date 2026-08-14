@@ -27,7 +27,7 @@ open-webui --OpenAI API--> drag-app (FastAPI)
 
 - `/ingest` (multipart PDF) → docling parse → embed → Qdrant upsert. **Creates the `drag` collection.**
 - `/v1/chat/completions`, `/query` → hybrid search → bge-rerank → streamed generation.
-- **Query/chat paths are guarded against a missing collection.** `/query` and `/v1/chat/completions` route through `search()`, which catches `UnexpectedResponse(404)` on the not-yet-created `drag` collection and returns `[]` → the chat emits "No relevant context found in the indexed books." (No 500, no broken SSE.) **`/books` and `DELETE /books/{book}` are NOT guarded** — they hit Qdrant (`scroll`/`delete`) directly, so on a fresh stack they raise `UnexpectedResponse` → HTTP 500. Ingest a book first so `ensure_collection()` runs.
+- **All endpoints tolerate a missing collection (no book ingested yet).** `search()` (used by `/query` + `/v1/chat/completions`), `/books`, and `DELETE /books/{book}` each catch `UnexpectedResponse(404)` on the not-yet-created `drag` collection: query/chat emit "No relevant context found in the indexed books.", `GET /books` returns `[]`, `DELETE /books/{book}` returns idempotent `{"deleted": book}`. Non-404 Qdrant errors still propagate. Ingest a book first so `ensure_collection()` creates the collection.
 
 ## Invariants (don't change without knowing why)
 

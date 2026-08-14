@@ -4,6 +4,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from qdrant_client import AsyncQdrantClient, models
+from qdrant_client.http.exceptions import UnexpectedResponse
 from sse_starlette.sse import EventSourceResponse
 
 from . import config
@@ -63,6 +64,11 @@ async def books_endpoint():
         return [
             {"book": b, "page": p.get("page"), "section": p.get("section")} for b, p in seen.items()
         ]
+    except UnexpectedResponse as e:
+        # Missing collection (fresh stack, no book ingested yet) -> no books.
+        if e.status_code == 404:
+            return []
+        raise
     finally:
         await client.close()
 
@@ -80,5 +86,10 @@ async def delete_book(book: str):
             ),
         )
         return {"deleted": book}
+    except UnexpectedResponse as e:
+        # Missing collection -> nothing to delete; idempotent success.
+        if e.status_code == 404:
+            return {"deleted": book}
+        raise
     finally:
         await client.close()
