@@ -109,7 +109,8 @@ async def embed_texts(texts: list[str], is_query: bool = False) -> list[list[flo
             todo_idx.append(i)
 
     if todo:
-        async with httpx.AsyncClient(base_url=config.LLAMA_EMBED_URL, timeout=300) as client:
+        # 64-chunk batch on CPU-limited llama-embed takes >5min; 300s ReadTimeout killed the upload mid-ingest
+        async with httpx.AsyncClient(base_url=config.LLAMA_EMBED_URL, timeout=1800) as client:
             for j in range(0, len(todo), 64):
                 batch = todo[j : j + 64]
                 r = await client.post("/v1/embeddings", json={"input": batch})
