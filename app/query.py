@@ -13,6 +13,15 @@ async def _client() -> AsyncQdrantClient:
     return AsyncQdrantClient(url=config.QDRANT_URL)
 
 
+def missing_collection(e: UnexpectedResponse, fallback):
+    """Qdrant 404 = the collection doesn't exist yet (fresh stack, nothing ingested):
+    return fallback. Any other status re-raises. Single home for this semantic —
+    used by search() and the /books endpoints."""
+    if e.status_code == 404:
+        return fallback
+    raise e
+
+
 async def search(question: str, book: str | None = None, limit: int = config.SEARCH_LIMIT):
     """Hybrid search, RRF fusion. Returns Qdrant ScoredPoint list."""
     qvec = (await ingest.embed_texts([question], is_query=True))[0]
@@ -40,12 +49,7 @@ async def search(question: str, book: str | None = None, limit: int = config.SEA
         )
         return res.points
     except UnexpectedResponse as e:
-        # Missing collection (fresh stack, no book ingested yet) -> empty, so answer()
-        # surfaces the existing "No relevant context found" instead of HTTP 500.
-        # Only the 404 is swallowed; real Qdrant errors still propagate.
-        if e.status_code == 404:
-            return []
-        raise
+        return missing_collection(e, [])
     finally:
         await client.close()
 
