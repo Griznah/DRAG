@@ -14,10 +14,16 @@ ENV UV_LINK_MODE=copy UV_COMPILE_BYTECODE=1 UV_PROJECT_ENVIRONMENT=/usr/local
 ENV TORCHDYNAMO_DISABLE=1
 COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-dev
-# rapidocr (docling OCR backend) downloads PP-OCRv6 weights into its package dir
-# on first init — bake at build as root so non-root uid 1001 runtime reads them
+# rapidocr (docling OCR backend) downloads model weights into its package dir on
+# first init — bake at build as root so non-root uid 1001 runtime reads them
 # instead of PermissionError on site-packages. No env var relocates its cache.
-RUN python -c "from rapidocr import RapidOCR; RapidOCR(); print('rapidocr models cached')"
+# ENGINE MUST BE TORCH: rapidocr's own default is onnxruntime (not installed here);
+# docling's auto-OCR tries onnxruntime->ImportError, easyocr->ImportError, then torch
+# (installed) -> selects it. So runtime uses the torch engine and downloads .pth
+# files. A bare RapidOCR() here would pick onnxruntime and fail the build; baking onnx
+# models would be ignored at runtime and leave the PermissionError unfixed. Force
+# torch to match runtime exactly.
+RUN python -c "from rapidocr import RapidOCR; from rapidocr.utils.typings import EngineType; RapidOCR(params={'Det.engine_type':EngineType.TORCH,'Cls.engine_type':EngineType.TORCH,'Rec.engine_type':EngineType.TORCH}); print('rapidocr torch models cached')"
 COPY app/ /app/app/
 # Non-root: chown the writable cwd (parse/embed caches land under /app) and /data
 # (HF_HOME + PDF dir; PVCs mount over these in K8s) and drop privileges.

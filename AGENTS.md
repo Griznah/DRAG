@@ -27,7 +27,7 @@ open-webui --OpenAI API--> drag-app (FastAPI)
 
 - `/ingest` (multipart PDF) → docling parse → embed → Qdrant upsert. **Creates the `drag` collection.**
 - `/v1/chat/completions`, `/query` → hybrid search → bge-rerank → streamed generation.
-- **Query before any ingest = 404** (collection doesn't exist yet). Not a bug — ingest a book first.
+- **Query before any ingest raises an unhandled `qdrant_client.UnexpectedResponse`** → HTTP **500** on `/books`-style REST calls, or a broken SSE stream on `/query` / `/v1/chat/completions`. (Qdrant returns a 404 for the missing `drag` collection, but that's server-side — the client sees 500, not 404. There is no 404 handler to look for.) Not a bug per se — ingest a book first so `ensure_collection()` runs.
 
 ## Invariants (don't change without knowing why)
 

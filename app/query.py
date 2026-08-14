@@ -3,6 +3,7 @@ import json
 
 import httpx
 from qdrant_client import AsyncQdrantClient, models
+from qdrant_client.http.exceptions import UnexpectedResponse
 
 from . import config, ingest
 from .reranker import rerank
@@ -38,6 +39,13 @@ async def search(question: str, book: str | None = None, limit: int = config.SEA
             with_payload=True,
         )
         return res.points
+    except UnexpectedResponse as e:
+        # Missing collection (fresh stack, no book ingested yet) -> empty, so answer()
+        # surfaces the existing "No relevant context found" instead of HTTP 500.
+        # Only the 404 is swallowed; real Qdrant errors still propagate.
+        if e.status_code == 404:
+            return []
+        raise
     finally:
         await client.close()
 
