@@ -5,7 +5,8 @@ raises UnexpectedResponse(404). The guard in search() must swallow that 404 so t
 chat path returns the existing "No relevant context found" instead of HTTP 500. Also
 asserts a non-404 (e.g. 500) still propagates, so real Qdrant errors aren't masked.
 
-Runnable as a script (matches tests/test_ingest.py); stdlib only — no pytest dep.
+Runnable as a script (matches tests/test_ingest.py); no pytest dependency — but needs
+the project venv (imports httpx + qdrant_client from the runtime deps).
 """
 import asyncio
 import pathlib

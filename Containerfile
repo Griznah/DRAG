@@ -17,12 +17,11 @@ RUN uv sync --frozen --no-dev
 # rapidocr (docling OCR backend) downloads model weights into its package dir on
 # first init — bake at build as root so non-root uid 1001 runtime reads them
 # instead of PermissionError on site-packages. No env var relocates its cache.
-# ENGINE MUST BE TORCH: rapidocr's own default is onnxruntime (not installed here);
-# docling's auto-OCR tries onnxruntime->ImportError, easyocr->ImportError, then torch
-# (installed) -> selects it. So runtime uses the torch engine and downloads .pth
-# files. A bare RapidOCR() here would pick onnxruntime and fail the build; baking onnx
-# models would be ignored at runtime and leave the PermissionError unfixed. Force
-# torch to match runtime exactly.
+# ENGINE = TORCH, pinned in app/ingest.py parse_pdf via RapidOcrOptions(backend="torch")
+# so runtime deterministically uses the torch engine. rapidocr's own default is
+# onnxruntime (not installed here): a bare RapidOCR() fails the build with ImportError,
+# and onnx-baked models would be ignored at runtime. Bake the torch .pth set to match
+# the pinned runtime exactly.
 RUN python -c "from rapidocr import RapidOCR; from rapidocr.utils.typings import EngineType; RapidOCR(params={'Det.engine_type':EngineType.TORCH,'Cls.engine_type':EngineType.TORCH,'Rec.engine_type':EngineType.TORCH}); print('rapidocr torch models cached')"
 COPY app/ /app/app/
 # Non-root: chown the writable cwd (parse/embed caches land under /app) and /data
