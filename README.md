@@ -44,7 +44,7 @@ UI: http://localhost:3000 (first signup = admin), pick model **drag**.
 | Var | Default | What |
 |---|---|---|
 | `QDRANT_URL` | `http://localhost:6333` | Qdrant |
-| `LLAMA_EMBED_URL` | `http://localhost:8081` | embedding server |
+| `LLAMA_EMBED_URL` | `http://localhost:8081` | embedding server (in-cluster llama-embed, or the GPU box — below) |
 | `LLAMA_GEN_URL` | `http://localhost:8080` | **external 27B box** |
 | `QDRANT_COLLECTION` | `drag` | collection name |
 | `CHUNK_TOKENS` / `MAX_TOKENS` | 512 / 1024 | HybridChunker size / cap |
@@ -72,6 +72,20 @@ git tag v0.1.3 && git push --tags
 ## Kubernetes
 
 Manifests live in **[k8s-apps](https://github.com/Griznah/k8s-apps)** under `div/drag/` (Argo CD ApplicationSet). Not in this repo.
+
+## Embeddings on the GPU box
+
+Cluster CPU too slow for the embed model? Run it on the external 27B box instead — no app change, it's pure `LLAMA_EMBED_URL`. llama.cpp serves one model per process, so it's a second `llama-server` next to the 27B (0.6B Q8 ≈ 0.7GB VRAM):
+
+```bash
+# on the gen box (it already has the llama.cpp binary)
+llama-server -hf Qwen/Qwen3-Embedding-0.6B-GGUF:Q8_0 --embedding -ngl 99 --port 8081 --host 0.0.0.0
+# or containerized: build the GPU variant and run it
+podman build -f Dockerfile.embed --build-arg CUDA=cu124 -t drag-llama-embed:gpu
+podman run --gpus all -e N_GPU_LAYERS=99 -p 8081:8080 drag-llama-embed:gpu
+```
+
+Same `/v1/embeddings` API either way. Then in k8s-apps (`div/drag/`): set `LLAMA_EMBED_URL=http://<gen-box>:8081` and delete the in-cluster llama-embed deployment. Ingest-time CPU embed (~10min/book) drops to seconds; `.embed_cache` in drag-app still saves re-embeds across restarts.
 
 ## License
 

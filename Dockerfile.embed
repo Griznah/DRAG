@@ -3,8 +3,12 @@
 # needed in K8s. (The plan's ghcr.io/abetlen image is gated; ggerganov/llama.cpp:full-*
 # are 2023-era — so build from the prebuilt CPU wheel index, the plan's own fallback.)
 FROM python:3.12-slim
+# GPU variant (run embed on the external gen box instead of cluster CPU):
+#   podman build -f Dockerfile.embed --build-arg CUDA=cu124 -t drag-llama-embed:gpu
+#   run with --gpus all -e N_GPU_LAYERS=99. Default `cpu` = what CI publishes.
+ARG CUDA=cpu
 RUN pip install --no-cache-dir "llama-cpp-python[server]" huggingface_hub \
-      --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu
+      --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/${CUDA}
 # ponytail: bake the model so the container is self-contained (drops a PVC + initContainer).
 RUN python -c "from huggingface_hub import hf_hub_download; hf_hub_download('Qwen/Qwen3-Embedding-0.6B-GGUF','Qwen3-Embedding-0.6B-Q8_0.gguf', local_dir='/models')"
 ENV MODEL=/models/Qwen3-Embedding-0.6B-Q8_0.gguf \
