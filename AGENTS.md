@@ -21,8 +21,8 @@ Guidance for AI agents in this repo. Local RAG for RPG PDFs: docling → Qwen3-E
 ```
 open-webui --OpenAI API--> drag-app (FastAPI)
                             ├─ qdrant        dense + server-side BM25, RRF fusion
-                            ├─ llama-embed   Qwen3-Embedding-0.6B (gguf baked in image)
-                            └─ LLAMA_GEN_URL external 27B box (Qwen3.6, chat endpoint)
+                            ├─ llama-embed   Qwen3-Embedding-0.6B (gguf baked in image; or external — README)
+                            └─ LLAMA_GEN_URL external 27B box (Qwen3.8, chat endpoint)
 ```
 
 - `/ingest` (multipart PDF) → docling parse → embed → Qdrant upsert. **Creates the `drag` collection.**
@@ -35,7 +35,7 @@ open-webui --OpenAI API--> drag-app (FastAPI)
 - **Models that download into their package dir must be baked at build, not fetched at runtime.** rapidocr (docling's OCR backend) drops PP-OCRv6 weights into `site-packages/rapidocr/models/` on first init; uid 1001 can't write there → `PermissionError`. Bake via `RUN python -c "from rapidocr import RapidOCR; RapidOCR()"` in `Containerfile` (as root, before `USER 1001`). rapidocr has no cache-relocating env var. Same pattern as the gguf baked into `Dockerfile.embed`.
 - **`HF_HOME=/data/hf-cache` (PVC) is the writable model dir at runtime.** docling + bge-reranker weights (~4GB) land there on first ingest, persist after. The PVC mounts over `/data` in k8s; the image chowns `/data` to 1001 at build.
 - **`TORCHDYNAMO_DISABLE=1`.** `python:3.12-slim` has no g++; torch eager avoids `build-essential` in the image. Don't remove without re-adding the compiler.
-- **All config env-overridable, defaults localhost.** No settings framework, no extra dep. See `app/config.py`. External LLM endpoint (`LLAMA_GEN_URL`) is the one value that must be set per-env, not localhost.
+- **All config env-overridable, defaults localhost.** No settings framework, no extra dep. See `app/config.py`. External LLM endpoint (`LLAMA_GEN_URL`) is the one value that must be set per-env, not localhost. `LLAMA_EMBED_URL` joins it when embeddings move off-cluster to the gen box (README → "Embeddings on the GPU box") — the in-cluster llama-embed deployment is then dropped.
 - **`uv sync --frozen --no-dev`.** Lock is law. Bump deps deliberately, commit `uv.lock`.
 
 ## Local dev
